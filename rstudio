@@ -3,6 +3,48 @@ library(doBy)
 yy <- summaryBy(spo2 ~ icustay_id , data = zjxybhd, FUN = list(median))
 write.csv(yy,"media.csv")
 
+
+#tableone制作
+# 加载包
+library(tableone)
+
+# 输出据集变量名称
+dput(names(a)) 
+
+## 需要统计输出的变量
+myVars <- c("age","is_male",""venttime",hospital_expire_flag","sofa","metastatic_cancer","spo2.median","sapsii","blood_culture_positive","vent","elixhauser_hospital")
+
+## 设定需要转为分类变量的变量
+catVars <- c("is_male","hospital_expire_flag","blood_culture_positive","vent","metastatic_cancer")
+
+#创建tableone
+tab2 <- CreateTableOne(vars = myVars, data = a, factorVars = catVars)
+
+#设定非正态分布变量
+biomarkers <- c("sofa","spo2.median","sapsii","age","elixhauser_hospital","venttime")
+
+#打印tableone
+print(tab2, nonnormal = biomarkers, showAllLevels = TRUE)
+#设定nonnormal = TRUE，则所有变量都按非正态分布处理。
+
+#分组统计
+tab3 <- CreateTableOne(vars = myVars, strata = "hospital_expire_flag" , data = a, factorVars = catVars)
+#hospital_expire_flag为分组标准，默认检验方法：分类变量默认使用卡方检验（chisq.test()）；连续变量默认使用方差分析（oneway.test()），当两组时方差分析等用于t检验。
+
+#定义检验方法
+#addOverall 添加Overall信息
+tab4 <- CreateTableOne(vars = myVars, strata = "hospital_expire_flag" , data = a, factorVars = catVars,addOverall = TRUE )
+#nonnormal设置需要卡方检验变量集biomarkers，exact设置fisher精确检验的变量如exact = "stage"。
+
+print(tab4, nonnormal = biomarkers)
+#非正态分布的连续变量使用kruskal.test()检验，两组间比较时，kruskal.test()和wilcox.test()等效；分类变量可使用fisher.test()进行fisher精确检验，通过exact（）指定进行fisher精确检验的变量。
+
+
+#导出结果
+tab4Mat <- print(tab4, nonnormal = biomarkers, quote = FALSE, noSpaces = TRUE, printToggle = FALSE, showAllLevels = TRUE)#可加需fish的exact = "stage"
+write.csv(tab4Mat, file = "myTable.csv")
+
+
 #探寻目标区间
 library(nlme)
 library(mgcv)
