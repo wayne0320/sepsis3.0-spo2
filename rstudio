@@ -12,7 +12,7 @@ library(tableone)
 dput(names(a)) 
 
 ## 需要统计输出的变量
-myVars <- c("age","is_male",""venttime",hospital_expire_flag","sofa","metastatic_cancer","spo2.median","sapsii","blood_culture_positive","vent","elixhauser_hospital")
+myVars <- c("age","is_male","venttime","hospital_expire_flag","sofa","metastatic_cancer","spo2.median","sapsii","blood_culture_positive","vent","elixhauser_hospital")
 
 ## 设定需要转为分类变量的变量
 catVars <- c("is_male","hospital_expire_flag","blood_culture_positive","vent","metastatic_cancer")
