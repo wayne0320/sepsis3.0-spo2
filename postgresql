@@ -1,0 +1,162 @@
+CREATE TABLE sepsisspo1 AS
+WITH id1 as(SELECT icustaydetails.* FROM "sepsis3",icustaydetails WHERE sepsis3 = 't' AND sepsis3.stay_id=icustaydetails.stay_id AND admission_age>=16 AND hospstay_seq=1 AND icustay_seq=1) ---年龄小于16，icu时长小于24，首次入院icu---
+,iddd AS (SELECT	ventilation.stay_id,EXTRACT ( DAY FROM endtime - starttime ) * 24 + EXTRACT ( HOUR FROM endtime - starttime ) + EXTRACT ( MINUTE FROM endtime - starttime ) / 60 AS oxytime FROM ventilation ),----氧疗时间---
+idddd AS (SELECT iddd.stay_id,SUM ( oxytime ) AS oxytime 	FROM 	id1,iddd 	WHERE	id1.stay_id = iddd.stay_id 	GROUP BY	iddd.stay_id),---氧疗总时间----
+idspo2 AS(SELECT id1.stay_id,count(pivoted_vital.spo2) as spo2num FROM id1,ventilation,pivoted_vital WHERE id1.stay_id=ventilation.stay_id AND id1.stay_id=pivoted_vital.stay_id and pivoted_vital.charttime BETWEEN ventilation.starttime AND ventilation.endtime AND pivoted_vital.spo2>0 GROUP BY id1.stay_id)----SPO2测量次数----
+SELECT id1.stay_id FROM id1,charlson WHERE  charlson.hadm_id=id1.hadm_id AND charlson.malignant_cancer=0 AND charlson.peripheral_vascular_disease=0 --除外肿瘤或者外周血管病
+INTERSECT
+SELECT id1.stay_id FROM id1,idddd 	WHERE	id1.stay_id = idddd.stay_id	AND idddd.oxytime >= 48 --氧疗时长＜48小时
+INTERSECT
+SELECT idspo2.stay_id FROM idspo2 WHERE spo2num >= 24
+EXCEPT 
+SELECT id1.stay_id FROM id1,diagnoses_icd WHERE id1.hadm_id=diagnoses_icd.hadm_id AND  icd_code IN (
+SELECT icd_code  FROM "d_icd_diagnoses" WHERE long_title~* '.*pregnancy.*')  --除外妊娠、分娩妇女
+EXCEPT 
+SELECT first_day_lab.stay_id FROM id1,first_day_lab WHERE id1.stay_id=first_day_lab.stay_id AND first_day_lab.hemoglobin_min<9--除外中重度贫血
+EXCEPT 
+SELECT first_day_bg_art.stay_id FROM id1,first_day_bg_art WHERE id1.stay_id=first_day_bg_art.stay_id AND first_day_bg_art.pco2_max>50 --除外合并高碳酸血症
+
+WITH id1 as(SELECT icustaydetails.* FROM "sepsis3",icustaydetails WHERE sepsis3 = 't' AND sepsis3.stay_id=icustaydetails.stay_id AND admission_age>=16 AND hospstay_seq=1 AND icustay_seq=1) ---年龄小于16，icu时长小于24，首次入院icu---
+,iddd AS (SELECT	ventilation.stay_id,EXTRACT ( DAY FROM endtime - starttime ) * 24 + EXTRACT ( HOUR FROM endtime - starttime ) + EXTRACT ( MINUTE FROM endtime - starttime ) / 60 AS oxytime FROM ventilation ),----氧疗时间---
+idddd AS (SELECT iddd.stay_id,SUM ( oxytime ) AS oxytime 	FROM 	id1,iddd 	WHERE	id1.stay_id = iddd.stay_id 	GROUP BY	iddd.stay_id),---氧疗总时间----
+idspo2 AS(SELECT id1.stay_id,count(pivoted_vital.spo2) as spo2num FROM id1,ventilation,pivoted_vital WHERE id1.stay_id=ventilation.stay_id AND id1.stay_id=pivoted_vital.stay_id and pivoted_vital.charttime BETWEEN ventilation.starttime AND ventilation.endtime AND pivoted_vital.spo2>0 GROUP BY id1.stay_id)----SPO2测量次数----
+SELECT id1.stay_id FROM id1,charlson WHERE  charlson.hadm_id=id1.hadm_id AND charlson.malignant_cancer=0 AND charlson.peripheral_vascular_disease=0 --除外肿瘤或者外周血管病
+INTERSECT
+SELECT id1.stay_id FROM id1,idddd 	WHERE	id1.stay_id = idddd.stay_id	AND idddd.oxytime >= 48 --氧疗时长＜48小时
+INTERSECT
+SELECT idspo2.stay_id FROM idspo2 WHERE spo2num >= 24
+EXCEPT 
+SELECT id1.stay_id FROM id1,diagnoses_icd WHERE id1.hadm_id=diagnoses_icd.hadm_id AND  icd_code IN (
+SELECT icd_code  FROM "d_icd_diagnoses" WHERE long_title~* '.*pregnancy.*')  --除外妊娠、分娩妇女
+EXCEPT 
+SELECT first_day_lab.stay_id FROM id1,first_day_lab WHERE id1.stay_id=first_day_lab.stay_id AND first_day_lab.hemoglobin_min<9--除外中重度贫血
+EXCEPT 
+SELECT id1.stay_id FROM id1,diagnoses_icd WHERE id1.hadm_id=diagnoses_icd.hadm_id AND  icd_code IN (
+SELECT icd_code  FROM "d_icd_diagnoses" WHERE long_title~* '.*astma.*'OR long_title~* '.*chronic obstructive pulmonary disease.*') 
+CREATE TABLE sepsisspo2 AS
+WITH idd as(
+SELECT DISTINCT  sepsisspo1.stay_id,percentile_cont(0.5) WITHIN GROUP (ORDER BY pivoted_vital.spo2) as spo2median
+FROM sepsisspo1,pivoted_vital,ventilation
+WHERE sepsisspo1.stay_id=pivoted_vital.stay_id AND sepsisspo1.stay_id=ventilation.stay_id AND pivoted_vital.charttime BETWEEN ventilation.starttime AND ventilation.endtime AND pivoted_vital.spo2>0 
+GROUP  BY sepsisspo1.stay_id)----SPO2中位数----
+SELECT icustaydetails.*,idd.spo2median,sepsis3.sofa_score,charlson.charlson_comorbidity_index
+FROM icustaydetails,idd,sepsis3,charlson
+WHERE icustaydetails.stay_id=idd.stay_id AND idd.stay_id=sepsis3.stay_id  AND icustaydetails.hadm_id=charlson.hadm_id
+
+CREATE TABLE sepsisspo3 AS
+with iddd AS (SELECT	ventilation.stay_id,EXTRACT ( DAY FROM endtime - starttime ) * 24 + EXTRACT ( HOUR FROM endtime - starttime ) + EXTRACT ( MINUTE FROM endtime - starttime ) / 60 AS oxytime FROM ventilation ),----氧疗时间---
+idddd AS (SELECT iddd.stay_id,SUM ( oxytime ) AS oxytime 	FROM 	sepsisspo2,iddd 	WHERE	sepsisspo2.stay_id = iddd.stay_id GROUP BY	iddd.stay_id),---氧疗总时间----
+idx as(SELECT sepsisspo2.stay_id,CASE WHEN ventilation.ventilation_status like 'Oxygen' THEN 1 WHEN  ventilation.ventilation_status like 'HighFlow' THEN 2 WHEN  ventilation.ventilation_status like 'NonInvasiveVent' THEN 2 ELSE 3 end AS ventgroup
+FROM sepsisspo2,ventilation WHERE ventilation.stay_id=sepsisspo2.stay_id),
+idxx as( SELECT idx.stay_id,max(idx.ventgroup) AS ventgroup FROM idx GROUP BY idx.stay_id)  ---1氧疗2无创3有创---
+SELECT sepsisspo2.*,idddd.oxytime,idxx.ventgroup
+FROM sepsisspo2,idddd,idxx
+WHERE sepsisspo2.stay_id=idddd.stay_id AND sepsisspo2.stay_id=idxx.stay_id
+
+CREATE TABLE sepsisspo4 AS
+WITH idd as(
+SELECT sepsisspo3.stay_id, ventilator_setting.charttime,ventilator_setting.fio2,EXTRACT ( DAY FROM ventilator_setting.charttime-sepsisspo3.icu_intime ) * 24*60 + EXTRACT ( HOUR FROM ventilator_setting.charttime-sepsisspo3.icu_intime )*60 + EXTRACT ( MINUTE FROM ventilator_setting.charttime-sepsisspo3.icu_intime) AS charttimet 
+FROM "ventilator_setting",sepsisspo3
+WHERE ventilator_setting.stay_id=sepsisspo3.stay_id AND ventilator_setting.fio2 is not null
+ORDER BY sepsisspo3.stay_id),idx as(
+SELECT a.stay_id,sum(fio2*timespan)/sum(timespan) AS fio2num
+ FROM
+ (select t.*
+			 , lag("charttimet",1) over(partition by stay_id order by charttimet) last_chartoffset          -- 上一个时间点
+			 , t.charttimet - lag("charttimet",1) over(partition by stay_id order by charttimet) timespan  -- 当前行的时间段：当前行时间点 - 上一个时间
+			 FROM idd t) a
+			 WHERE a.last_chartoffset is not null 
+			 GROUP BY a.stay_id
+			 ORDER BY a.stay_id)
+			 SELECT sepsisspo3.*,idx.fio2num
+			 FROM sepsisspo3,idx
+			 WHERE sepsisspo3.stay_id=idx.stay_id
+			 ORDER BY idx.stay_id  
+
+
+---得到fio2时间加权平均数-----
+
+CREATE TABLE sepsisspo5 AS
+WITH idd as(
+SELECT sepsisspo4.stay_id, pivoted_vital.spo2,EXTRACT ( DAY FROM pivoted_vital.charttime-sepsisspo4.icu_intime ) * 24*60 + EXTRACT ( HOUR FROM  pivoted_vital.charttime-sepsisspo4.icu_intime )*60 + EXTRACT ( MINUTE FROM  pivoted_vital.charttime-sepsisspo4.icu_intime) AS charttimet 
+FROM sepsisspo4,pivoted_vital,ventilation
+WHERE sepsisspo4.stay_id=pivoted_vital.stay_id AND sepsisspo4.stay_id=ventilation.stay_id AND pivoted_vital.charttime BETWEEN ventilation.starttime AND ventilation.endtime AND pivoted_vital.spo2>0 
+ORDER BY sepsisspo4.stay_id,charttime),
+idx as(
+SELECT a.stay_id,sum(spo2*timespan)/sum(timespan) AS spo2num
+ FROM
+ (select t.*
+			 , lag("charttimet",1) over(partition by stay_id order by charttimet) last_chartoffset          -- 上一个时间点
+			 , t.charttimet - lag("charttimet",1) over(partition by stay_id order by charttimet) timespan  -- 当前行的时间段：当前行时间点 - 上一个时间
+			 FROM idd t) a
+			 WHERE a.last_chartoffset is not null 
+			 GROUP BY a.stay_id
+			 ORDER BY a.stay_id)
+			 SELECT sepsisspo4.*,round(idx.spo2num) AS spo2num
+			 FROM sepsisspo4,idx
+			 WHERE sepsisspo4.stay_id=idx.stay_id
+			 ORDER BY idx.stay_id  
+
+------得到spo2 时间加权------
+WiTH idd AS (
+	SELECT DISTINCT
+		"sepsisspo5".stay_id 
+	FROM
+		"sepsisspo5",
+		vasoactive_agent 
+	WHERE
+	Sepsisspo5.stay_id=vasoactive_agent.stay_id AND  vasoactive_agent.starttime BETWEEN sepsisspo5.icu_intime  AND vasoactive_agent.endtime
+	),
+	shock1 AS ( SELECT sepsisspo5.stay_id FROM idd, sepsisspo5 WHERE idd.stay_id = sepsisspo5.stay_id ),
+	shock0 AS ( SELECT sepsisspo5.stay_id FROM sepsisspo5 EXCEPT SELECT idd.stay_id FROM idd ) ,shockk as(
+	SELECT	sepsisspo5.*,CASE WHEN shock1.stay_id=sepsisspo5.stay_id THEN	1  ELSE 0 END AS shock ,
+	CASE WHEN spo2median<=94 THEN 1  WHEN spo2median>98 THEN 2 ELSE 0 END AS group1
+FROM
+	sepsisspo5
+	LEFT JOIN shock1
+	ON shock1.stay_id = sepsisspo5.stay_id
+	LEFT JOIN shock0
+  ON  shock0.stay_id = sepsisspo5.stay_id),
+	crrt1 as( SELECT DISTINCT  sepsisspo5.stay_id FROM crrt,sepsisspo5 WHERE crrt.stay_id = sepsisspo5.stay_id),
+	crrt0 as( SELECT DISTINCT sepsisspo5.stay_id FROM sepsisspo5 EXCEPT SELECT crrt.stay_id FROM crrt),
+	vap1 as(SELECT sepsisspo5.stay_id FROM vapid,sepsisspo5 WHERE vapid.hadm_id = sepsisspo5.hadm_id),
+	vap0 as( SELECT DISTINCT sepsisspo5.stay_id FROM sepsisspo5 EXCEPT SELECT vap1.stay_id FROM vap1)
+	SELECT	shockk.*,CASE WHEN shockk.stay_id=crrt1.stay_id THEN	1  ELSE 0 END AS crrt ,CASE WHEN hospital_expire_flag =1 AND icu_outtime>= dischtime-INTERVAL '2h' THEN 1 ELSE 0 END as icumortality,charlson.*,first_day_lab.*,first_day_weight.weight,height.height,case WHEN vap1.stay_id=shockk.stay_id THEN 1 ELSE 0 END AS vap
+FROM
+	shockk
+	LEFT JOIN crrt1
+	ON crrt1.stay_id = shockk.stay_id
+	LEFT JOIN crrt0
+  ON  crrt0.stay_id = shockk.stay_id
+	LEFT JOIN first_day_lab
+	ON first_day_lab.stay_id=shockk.stay_id
+	LEFT JOIN charlson
+	ON charlson.hadm_id=shockk.hadm_id
+	LEFT JOIN first_day_weight
+	ON first_day_weight.stay_id=shockk.stay_id
+	LEFT JOIN height
+	ON height.stay_id=shockk.stay_id
+	LEFT JOIN vap1
+	ON vap1.stay_id=shockk.stay_id
+	LEFT JOIN vap0
+	ON vap0.stay_id=shockk.stay_id
+	ORDER BY shockk.stay_id
+	
+-----休克与否/氧疗分组/crrt/icumortaliy/firstlab/vap----------
+
+
+
+WITH idd as(
+
+SELECT * FROM
+    (SELECT ROW_NUMBER() OVER (partition BY stay_id  ORDER BY ab_id) rowId,*
+    from suspicion_of_infection) t
+WHERE rowId=1)
+
+SELECT sepsisspo6.*,d_infectt.specimenn as specimenid
+FROM "sepsisspo6" 
+LEFT JOIN idd
+ON sepsisspo6.stay_id=idd.stay_id 
+LEFT JOIN d_infectt
+ON idd.specimen=d_infectt.specimen 
+----感染部位---
