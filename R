@@ -1,0 +1,130 @@
+library(doBy)
+library(nlme)
+library(mgcv)
+library(scales)
+library(ggplot2)
+gam1 <-  gam(a$hospital_expire_flag ~ s(a$spo2num),family=binomial,data=a)
+pred<- predict.gam(gam1,se=TRUE,type = 'response')
+pred$spo2<- a$spo2num
+pred$ci1<- pred$fit+1.96*pred$se.fit
+pred$ci2<- pred$fit-1.96*pred$se.fit
+pred<- as.data.frame(pred)
+p<- ggplot()+geom_smooth(data=pred,aes(spo2,fit),se=FALSE,color='black')+geom_smooth(data=pred,aes(spo2,ci1),se=FALSE,linetype="dashed",color='black')+geom_smooth(data=pred,aes(spo2,ci2),se=FALSE,linetype="dashed",color='black')+theme_set(theme_bw())+xlab(expression("TWA-S"["p"]*"O"["2"]*""))+ylab("In-hospital  mortality")+theme(panel.grid =element_blank()) +theme(panel.grid.major=element_line(colour=NA))+scale_y_continuous(labels = percent)+scale_x_continuous(limits = c(90,100),breaks=seq(90,100,2))
+
+glm1<-glm(a$hospital_expire_flag~a$g,data =a,family = binomial(link = "logit"))
+glm2<-glm(a$hospital_expire_flag~a$g+a$admission_age+a$male+a$WHITE,data =a,family = binomial(link = "logit"))
+glm3<-glm(a$hospital_expire_flag~a$g+a$admission_age+a$white+a$sapsii+a$sofa_score+a$oxytime+a$ventgroup+a$fio2num+a$charlson_comorbidity_index,family = binomial(link = "logit"),data =a)
+summary(glm3)
+exp(coef(glm3)) 
+exp(confint(glm3))
+
+data_age0<- a[a$admission_age<65,]
+data_gener0 <- a[a$gender==0,]
+
+a$male <- factor(a$male)
+a$WHITE<- factor(a$WHITE)
+a$hospital_expire_flag<- factor(a$hospital_expire_flag)
+a$ventgroup<- factor(a$ventgroup)
+a$g<- factor(a$g)
+a$shock<-factor(a$shock)
+a$crrt<- factor(a$crrt)
+a$icumortality<-factor(a$icumortality)
+
+---导入文件改名为forest---
+library(forestplot)
+forestplot(labeltext = as.matrix(forest[,1:4]),
+           #设置用于文本展示的列，此处我们用数据的前六列作为文本，在图中展示
+           mean = forest$X5, #设置均值
+           lower = forest$X6, #设置均值的下限
+           upper = forest$X7, #设置均值的上限
+           is.summary = c(T,T,T,F,F,T,F,F,T,T,F,F,T,F,F,T,T,F,F,T,F,F,T,T,F,F,T,F,F,T,F,F),
+           #定义数据中的每一行是否是汇总值，若是，在对应位置设置为TRUE，若否，则设置为FALSE；
+           #设置为TRUE的行则以粗体出现
+           xticks = c(0,1,2,3),#设置X轴刻度线
+           clip = c(0,3),#设置可信区间范围，超出部分用箭头展示
+           ci.vertices.height = 0.05,
+           zero = 1, #设置参照值，此处展示的是OR，故参照值是1，而不是0
+           boxsize = 0.2, #设置点估计的方形大小
+           lineheight = unit(6,'mm'),#设置图形中的行距
+           colgap = unit(2,'mm'),#设置图形中的列间距
+           lwd.zero = 2,#设置参考线的粗细
+           lwd.ci = 2,#设置区间估计线的粗细
+           lwd.xaxis=2,#设置X轴线的粗细
+           xlog=FALSE,
+           grid = FALSE,
+           lty.ci = 1,
+           col=fpColors(box='#458B00',  summary= "#8B008B",lines = 'black',zero = '#7AC5CD'),
+           #使用fpColors()函数定义图形元素的颜色，从左至右分别对应点估计方形，汇总值，区间估计线，参考线
+           graph.pos = 3)#设置森林图的位置，此处设置为4，则出现在第4列
+
+forestplot(labeltext = as.matrix(forest[,1:3]),
+           #设置用于文本展示的列，此处我们用数据的前六列作为文本，在图中展示
+           mean = forest$X4, #设置均值
+           lower = forest$X5, #设置均值的下限
+           upper = forest$X6, #设置均值的上限
+           is.summary = c(T,F,F,T,F,F),
+           #定义数据中的每一行是否是汇总值，若是，在对应位置设置为TRUE，若否，则设置为FALSE；
+           #设置为TRUE的行则以粗体出现
+           xticks = c(0,1,2,3),#设置X轴刻度线
+           clip = c(0,3),#设置可信区间范围，超出部分用箭头展示
+           ci.vertices.height = 0.05,
+           zero = 1, #设置参照值，此处展示的是OR，故参照值是1，而不是0
+           boxsize = 0.1, #设置点估计的方形大小
+           lineheight = unit(12,'mm'),#设置图形中的行距
+           colgap = unit(8,'mm'),#设置图形中的列间距
+           lwd.zero = 2,#设置参考线的粗细
+           lwd.ci = 2,#设置区间估计线的粗细
+           lwd.xaxis=2,#设置X轴线的粗细
+           xlog=FALSE,
+           grid = FALSE,
+           lty.ci = 1,
+           col=fpColors(box='#458B00',  summary= "#8B008B",lines = 'black',zero = '#7AC5CD'),
+           #使用fpColors()函数定义图形元素的颜色，从左至右分别对应点估计方形，汇总值，区间估计线，参考线
+           graph.pos = 3)#设置森林图的位置，此处设置为4，则出现在第4列
+
+---tableone----
+
+a$male <- factor(a$male)
+a$WHITE<- factor(a$WHITE)
+a$hospital_expire_flag<- factor(a$hospital_expire_flag)
+a$ventgroup<- factor(a$ventgroup)
+a$g<- factor(a$g)
+a$shock<-factor(a$shock)
+a$crrt<- factor(a$crrt)
+a$icumortality<-factor(a$icumortality)
+
+library(gtsummary)
+library(flextable)
+tb1<- a %>%
+    tbl_summary(
+        by = hospital_expire_flag,
+        digits = all_continuous() ~ 2) %>%
+add_p(pvalue_fun = ~style_pvalue(.x, digits = 3))
+add_n() %>%
+
+tb1%>%
+  as_gt() %>%
+  gt::gtsave("tab_1.rtf") # use extensions .html .tex .ltx .rtf ;default path
+
+
+---中介分析----
+a$male <- factor(a$male)
+a$WHITE<- factor(a$WHITE)
+a$hospital_expire_flag<- factor(a$hospital_expire_flag)
+a$ventgroup<- factor(a$ventgroup)
+a$g<- factor(a$g)
+a$shock<-factor(a$shock)
+a$crrt<- factor(a$crrt)
+a$icumortality<-factor(a$icumortality)
+
+library(mediation)
+
+b<- glm(a$fio2num~a$g+a$admission_age+a$WHITE+a$sapsii+a$sofa_score+a$oxytime+a$ventgroup+a$charlson_comorbidity_index+shock,data=a)
+
+c <-glm(a$hospital_expire_flag~a$g+a$admission_age+a$WHITE+a$sapsii+a$sofa_score+a$oxytime+a$ventgroup+a$fio2num+a$charlson_comorbidity_index+shock,family = binomial(link = "logit"),data =a)
+
+contcont <- mediate(b, c, treat="a$g", mediator="a$fio2num")
+
+summary(contcont)
+
+plot(contcont)
